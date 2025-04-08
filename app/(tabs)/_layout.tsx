@@ -44,7 +44,6 @@ return (
       />
     </Tabs> : <Login isLogged={() => {
       setIsLoggedIn(true)
-      console.log('etettooooo>>>>>>')
     }}/>
   );
 }
