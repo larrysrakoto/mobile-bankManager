@@ -1,16 +1,23 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Button, Text, FlatList, TouchableOpacity, Modal, TextInput } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, View, Button, Text, FlatList, TouchableOpacity, Modal, TextInput, Dimensions } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { ThemedText } from '@/components/ThemedText';
 import { FontAwesome } from '@expo/vector-icons'; // Import des icônes
+import { deleteData, getData, saveData } from '@/utils';
+import { VictoryBar, VictoryChart, VictoryTheme } from 'victory-native';
+import { BarChart } from 'react-native-chart-kit';
 
 export default function HomeScreen() {
-  const [data, setData] = useState([
-    { id: '1', name: 'Elon Musk', account: '123456789', balance: '1000€' },
-    { id: '2', name: 'Jeff Bezos', account: '987654321', balance: '2500€' },
-    { id: '3', name: 'Bill Gates', account: '456789123', balance: '500€' },
-    { id: '4', name: 'Warren Buffet', account: '789123456', balance: '6000€' },
-  ]);
+  const [data, setData] = useState([]);
+
+  useEffect(() => {
+    getData()
+      .then((fetchedData) => {
+        setData(fetchedData);
+        setFilteredData(fetchedData);
+      }
+      )
+  }, []);
 
   const [filteredData, setFilteredData] = useState(data);
   const [filter, setFilter] = useState('tout');
@@ -19,21 +26,23 @@ export default function HomeScreen() {
   const [selectedItemId, setSelectedItemId] = useState(null);
   const [newName, setNewName] = useState('');
   const [newBalance, setNewBalance] = useState('');
+  const [isChartModalVisible, setChartModalVisible] = useState(false);
 
   const handleAdd = () => {
     setIsEditing(false);
     setNewName('');
     setNewBalance('');
     setModalVisible(true);
+
   };
 
-  const handleEdit = (id) => {
-    const itemToEdit = data.find((item) => item.id === id);
+  const handleEdit = (num) => {
+    const itemToEdit = data.find((item) => item.num === num);
     if (itemToEdit) {
       setIsEditing(true);
-      setSelectedItemId(id);
-      setNewName(itemToEdit.name);
-      setNewBalance(itemToEdit.balance.replace('€', '')); // Retirer le symbole € pour l'édition
+      setSelectedItemId(num);
+      setNewName(itemToEdit.nom);
+      setNewBalance(itemToEdit.sold.replace('€', '')); // Retirer le symbole € pour l'édition
       setModalVisible(true);
     }
   };
@@ -44,66 +53,129 @@ export default function HomeScreen() {
       setData((prevData) =>
         prevData.map((item) =>
           item.id === selectedItemId
-            ? { ...item, name: newName, balance: `${newBalance}€` }
+            ? { ...item, nom: newName, sold: `${newBalance}€` }
             : item
         )
       );
     } else {
       // Ajouter un nouvel élément
       const newItem = {
-        id: (data.length + 1).toString(),
-        name: newName,
-        account: Math.floor(Math.random() * 1000000000).toString(), // Génère un numéro de compte aléatoire
-        balance: `${newBalance}€`,
+        num:  Math.floor(Math.random() * 1000000000).toString(),
+        nom: newName,
+        sold: `${newBalance}€`,
       };
-      setData([...data, newItem]);
+      // setData([...data, newItem]);
+      saveData(newItem.num, newItem.nom, newItem.sold)
+        .then((response) => {
+          getData()
+            .then((fetchedData) => {
+              setData(fetchedData);
+              setFilteredData(fetchedData);
+            }
+            )
+        }
+        )
     }
     setModalVisible(false);
     setNewName('');
     setNewBalance('');
     setSelectedItemId(null);
-    applyFilter(filter); // Réappliquer le filtre après ajout ou modification
+    // applyFilter(filter); // Réappliquer le filtre après ajout ou modification
   };
 
-  const handleDelete = (id) => {
-    setData(data.filter((item) => item.id !== id));
-    applyFilter(filter); // Réappliquer le filtre après suppression
+  const handleDelete = (num) => {
+    deleteData(num)
+      .then((response) => {
+        getData()
+            .then((fetchedData) => {
+              setData(fetchedData);
+              setFilteredData(fetchedData);
+            }
+            )
+      }
+      )
   };
 
   const applyFilter = (selectedFilter) => {
-    setFilter(selectedFilter);
+    setFilter(selectedFilter); // Met à jour l'état du filtre sélectionné
     if (selectedFilter === 'tout') {
-      setFilteredData(data);
+      setFilteredData(data); // Affiche toutes les données
     } else if (selectedFilter === 'insuffisant') {
-      setFilteredData(data.filter((item) => parseFloat(item.balance.replace('€', '')) < 1000));
+      setFilteredData(data.filter((item) => parseFloat(item.sold.replace('€', '')) < 1000)); // Solde < 1000
     } else if (selectedFilter === 'moyen') {
       setFilteredData(
         data.filter(
           (item) =>
-            parseFloat(item.balance.replace('€', '')) >= 1000 &&
-            parseFloat(item.balance.replace('€', '')) <= 5000
+            parseFloat(item.sold.replace('€', '')) >= 1000 &&
+            parseFloat(item.sold.replace('€', '')) <= 5000 // Solde entre 1000 et 5000
         )
       );
     } else if (selectedFilter === 'élevé') {
-      setFilteredData(data.filter((item) => parseFloat(item.balance.replace('€', '')) > 5000));
+      setFilteredData(data.filter((item) => parseFloat(item.sold.replace('€', '')) > 5000)); // Solde > 5000
     }
   };
 
+  useEffect(() => {
+    applyFilter(filter); // Réapplique le filtre chaque fois que les données changent
+  }, [data]);
+
+  const getMinMaxBalance = () => {
+    if (filteredData.length === 0) {
+      return { min: 0, max: 0, total: 0 };
+    }
+
+    const balances = filteredData.map((item) => parseFloat(item.sold.replace('€', '')));
+    const min = Math.min(...balances);
+    const max = Math.max(...balances);
+    const total = balances.reduce((sum, value) => sum + value, 0); // Calcul du total
+
+    return { min, max, total };
+  };
+
+  const { min, max, total } = getMinMaxBalance();
+
   const renderItem = ({ item }) => (
-    <View style={styles.row}>
-      <Text style={styles.cell}>{item.account}</Text>
-      <Text style={styles.cell}>{item.name}</Text>
-      <Text style={styles.cell}>{item.balance}</Text>
+    <View style={styles.row} key={item.id}>
+      <Text style={styles.cell}>{item.num}</Text>
+      <Text style={styles.cell}>{item.nom}</Text>
+      <Text style={styles.cell}>{item.sold}</Text>
       <View style={styles.cellActions}>
         <TouchableOpacity onPress={() => handleEdit(item.id)} style={styles.iconButton}>
           <FontAwesome name="edit" size={20} color="#fff" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.iconButton}>
+        <TouchableOpacity onPress={() => handleDelete(item.num)} style={styles.iconButton}>
           <FontAwesome name="trash" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
     </View>
   );
+
+  const openChartModal = () => {
+    setChartModalVisible(true);
+  };
+
+  const closeChartModal = () => {
+    setChartModalVisible(false);
+  };
+
+  const chartData = {
+    labels: filteredData.map((item) => item.nom), // Noms des clients
+    datasets: [
+      {
+        data: filteredData.map((item) => parseFloat(item.sold.replace('€', ''))), // Soldes des clients
+      },
+    ],
+  };
+
+  const minMaxColors = filteredData.map((item) => {
+    const value = parseFloat(item.sold.replace('€', ''));
+    if (value === min) {
+      return '#FF0000'; // Rouge pour le minimum
+    } else if (value === max) {
+      return '#00FF00'; // Vert pour le maximum
+    }
+    return '#015B94'; // Bleu pour les autres
+  });
 
   return (
     <View style={styles.container}>
@@ -136,6 +208,12 @@ export default function HomeScreen() {
           keyExtractor={(item) => item.id}
           style={styles.table}
         />
+        <View style={styles.balanceSummary}>
+          <Text style={styles.balanceText}>Solde Minimal : {min}€</Text>
+          <Text style={styles.balanceText}>Solde Maximal : {max}€</Text>
+          <Text style={styles.balanceText}>Total des Soldes : {total}€</Text>
+        </View>
+        <Button title="Visualiser Histogramme" onPress={openChartModal} />
       </View>
 
       {/* Modal pour ajouter ou modifier un élément */}
@@ -162,6 +240,37 @@ export default function HomeScreen() {
               keyboardType="numeric"
             />
             <Button title="Enregistrer" onPress={handleSave} />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal pour afficher l'histogramme */}
+      <Modal visible={isChartModalVisible} animationType="slide" transparent={true}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity onPress={closeChartModal} style={styles.closeButton}>
+              <FontAwesome name="close" size={24} color="#015B94" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Histogramme des Soldes</Text>
+            {filteredData.length > 0 ? (
+              <BarChart
+                data={chartData}
+                width={Dimensions.get('window').width - 40}
+                height={220}
+                yAxisLabel="€"
+                chartConfig={{
+                  backgroundColor: '#015B94',
+                  backgroundGradientFrom: '#015B94',
+                  backgroundGradientTo: '#81D4FA',
+                  decimalPlaces: 2,
+                  color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                }}
+                verticalLabelRotation={30}
+              />
+            ) : (
+              <Text>Aucune donnée disponible pour l'histogramme.</Text>
+            )}
           </View>
         </View>
       </Modal>
@@ -254,7 +363,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    width: '80%',
+    width: '90%',
     backgroundColor: '#fff',
     borderRadius: 10,
     padding: 20,
@@ -277,5 +386,17 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 15,
     paddingHorizontal: 10,
+  },
+  balanceSummary: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: '#E6F7FF',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  balanceText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#015B94',
   },
 });
