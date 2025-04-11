@@ -1,5 +1,5 @@
 // const baseUrl = 'http://localhost:5000'
-const baseUrl = 'https://8e63-2605-59c0-5edc-ea10-7028-1a53-39e3-8a53.ngrok-free.app'
+const baseUrl = 'https://e661-2605-59c0-5edc-ea10-f93d-b00c-77e6-ba51.ngrok-free.app'
 
 export const getData = async () => {
   try {
@@ -43,3 +43,19 @@ export const deleteData = async (num: string) => {
     console.error('Error deleting data:', error);
   }
 }
+
+export const updateData = async (num: string, nom: string, sold: string) => {
+  try {
+    const response = await fetch(`${baseUrl}/update-client/${num}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ nom, sold }),
+    });
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error updating data:', error);
+  }
+};

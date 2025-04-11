@@ -3,7 +3,7 @@ import { StyleSheet, View, Button, Text, FlatList, TouchableOpacity, Modal, Text
 import { Picker } from '@react-native-picker/picker';
 import { ThemedText } from '@/components/ThemedText';
 import { FontAwesome } from '@expo/vector-icons'; // Import des icônes
-import { deleteData, getData, saveData } from '@/utils';
+import { deleteData, getData, saveData, updateData } from '@/utils';
 import { VictoryBar, VictoryChart, VictoryTheme } from 'victory-native';
 import { BarChart } from 'react-native-chart-kit';
 
@@ -36,51 +36,51 @@ export default function HomeScreen() {
 
   };
 
-  const handleEdit = (num) => {
-    const itemToEdit = data.find((item) => item.num === num);
-    if (itemToEdit) {
-      setIsEditing(true);
-      setSelectedItemId(num);
-      setNewName(itemToEdit.nom);
-      setNewBalance(itemToEdit.sold.replace('€', '')); // Retirer le symbole € pour l'édition
-      setModalVisible(true);
-    }
+  const handleEdit = (item) => {
+    setIsEditing(true);
+    setSelectedItemId(item.num);
+    setNewName(item.nom);
+    setNewBalance(item.sold.replace('€', ''));
+    setModalVisible(true);
   };
-
+  
   const handleSave = () => {
-    if (isEditing) {
+    if (isEditing && selectedItemId) {
       // Modifier l'élément existant
-      setData((prevData) =>
-        prevData.map((item) =>
-          item.id === selectedItemId
-            ? { ...item, nom: newName, sold: `${newBalance}€` }
-            : item
-        )
-      );
+      updateData(selectedItemId, newName, `${newBalance}€`)
+        .then((response) => {
+          getData()
+            .then((fetchedData) => {
+              setData(fetchedData);
+              setFilteredData(fetchedData);
+            });
+        })
+        .catch((error) => {
+          console.error('Erreur lors de la mise à jour des données :', error);
+        });
     } else {
       // Ajouter un nouvel élément
       const newItem = {
-        num:  Math.floor(Math.random() * 1000000000).toString(),
+        num: Math.floor(Math.random() * 1000000000).toString(),
         nom: newName,
         sold: `${newBalance}€`,
       };
-      // setData([...data, newItem]);
       saveData(newItem.num, newItem.nom, newItem.sold)
         .then((response) => {
           getData()
             .then((fetchedData) => {
               setData(fetchedData);
               setFilteredData(fetchedData);
-            }
-            )
-        }
-        )
+            });
+        })
+        .catch((error) => {
+          console.error('Erreur lors de l\'ajout des données :', error);
+        });
     }
     setModalVisible(false);
     setNewName('');
     setNewBalance('');
     setSelectedItemId(null);
-    // applyFilter(filter); // Réappliquer le filtre après ajout ou modification
   };
 
   const handleDelete = (num) => {
@@ -140,7 +140,7 @@ export default function HomeScreen() {
       <Text style={styles.cell}>{item.nom}</Text>
       <Text style={styles.cell}>{item.sold}</Text>
       <View style={styles.cellActions}>
-        <TouchableOpacity onPress={() => handleEdit(item.id)} style={styles.iconButton}>
+        <TouchableOpacity onPress={() => handleEdit(item)} style={styles.iconButton}>
           <FontAwesome name="edit" size={20} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => handleDelete(item.num)} style={styles.iconButton}>
@@ -229,13 +229,13 @@ export default function HomeScreen() {
             <TextInput
               style={styles.input}
               placeholder="Nom"
-              value={newName}
+              value={newName} // Affiche la valeur actuelle
               onChangeText={setNewName}
             />
             <TextInput
               style={styles.input}
               placeholder="Solde"
-              value={newBalance}
+              value={newBalance} // Affiche la valeur actuelle
               onChangeText={setNewBalance}
               keyboardType="numeric"
             />
@@ -252,7 +252,7 @@ export default function HomeScreen() {
               <FontAwesome name="close" size={24} color="#015B94" />
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Histogramme des Soldes</Text>
-            {filteredData.length > 0 ? (
+            {filteredData?.length > 0 ? (
               <BarChart
                 data={chartData}
                 width={Dimensions.get('window').width - 40}
